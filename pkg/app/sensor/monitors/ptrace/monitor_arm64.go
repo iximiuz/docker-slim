@@ -89,11 +89,11 @@ func NewMonitor(
 }
 
 func (m *monitor) Start() error {
+	log.Info("sensor: ptmon starting...")
 	log.
 		WithField("name", m.runOpt.Cmd).
 		WithField("args", m.runOpt.Args).
 		Debug("sensor: starting target app...")
-	log.Info("ptmon: Start")
 
 	sysInfo := system.GetSystemInfo()
 	archName := system.MachineToArchName(sysInfo.Machine)
@@ -111,7 +111,7 @@ func (m *monitor) Start() error {
 
 	// Starting the async part...
 	go func() {
-		log.Debug("ptmon: processor - starting...")
+		log.Debug("sensor: ptmon processor - starting...")
 
 		ptReport := &report.PtMonitorReport{
 			ArchName:     string(archName),
@@ -125,7 +125,7 @@ func (m *monitor) Start() error {
 		var app *exec.Cmd
 
 		go func() {
-			log.Debug("ptmon: collector - starting...")
+			log.Debug("sensor: ptmon collector - starting...")
 			//Ptrace is not pretty... and it requires that you do all ptrace calls from the same thread
 			runtime.LockOSThread()
 
@@ -157,40 +157,40 @@ func (m *monitor) Start() error {
 
 			//pgid, err := syscall.Getpgid(targetPid)
 			//if err != nil {
-			//	log.Warnf("ptmon: collector - getpgid error %d: %v", targetPid, err)
+			//	log.Warnf("sensor: ptmon collector - getpgid error %d: %v", targetPid, err)
 			//	collectorDoneChan <- 1
 			//	return
 			//}
 
-			log.Debugf("ptmon: collector - target PID ==> %d", targetPid)
+			log.Debugf("sensor: ptmon collector - target PID ==> %d", targetPid)
 
 			var wstat unix.WaitStatus
 
 			//pid, err := syscall.Wait4(-1, &wstat, syscall.WALL, nil) - WIP
 			pid, err := unix.Wait4(targetPid, &wstat, 0, nil)
 			if err != nil {
-				log.Warnf("ptmon: collector - error waiting for %d: %v", targetPid, err)
+				log.Warnf("sensor: ptmon collector - error waiting for %d: %v", targetPid, err)
 				collectorDoneChan <- 2
 				return
 			}
 
 			//err = syscall.PtraceSetOptions(targetPid, ptOptions)
 			//if err != nil {
-			//	log.Warnf("ptmon: collector - error setting trace options %d: %v", targetPid, err)
+			//	log.Warnf("sensor: ptmon collector - error setting trace options %d: %v", targetPid, err)
 			//	collectorDoneChan <- 3
 			//	return
 			//}
 
-			log.Debugf("ptmon: initial process status = %v (pid=%d)\n", wstat, pid)
+			log.Debugf("sensor: ptmon initial process status = %v (pid=%d)\n", wstat, pid)
 
 			if wstat.Exited() {
-				log.Warn("ptmon: collector - app exited (unexpected)")
+				log.Warn("sensor: ptmon collector - app exited (unexpected)")
 				collectorDoneChan <- 4
 				return
 			}
 
 			if wstat.Signaled() {
-				log.Warn("ptmon: collector - app signalled (unexpected)")
+				log.Warn("sensor: ptmon collector - app signalled (unexpected)")
 				collectorDoneChan <- 5
 				return
 			}
@@ -205,10 +205,10 @@ func (m *monitor) Start() error {
 
 				switch syscallReturn {
 				case false:
-					log.Infof("target pid is %d", targetPid)
+					log.Infof("sensor: target pid is %d", targetPid)
 					if err := unix.PtraceGetRegSetArm64(targetPid, 1, &regs); err != nil {
 						//if err := syscall.PtraceGetRegs(pid, &regs); err != nil {
-						log.Fatalf("ptmon: collector - PtraceGetRegsArm64(call): %v", err)
+						log.Fatalf("sensor: ptmon collector - PtraceGetRegsArm64(call): %v", err)
 					}
 
 					callNum = system.CallNumber(regs)
@@ -218,7 +218,7 @@ func (m *monitor) Start() error {
 				case true:
 					if err := unix.PtraceGetRegSetArm64(targetPid, 1, &regs); err != nil {
 						//if err := syscall.PtraceGetRegs(pid, &regs); err != nil {
-						log.Fatalf("ptmon: collector - PtraceGetRegsArm64(return): %v", err)
+						log.Fatalf("sensor: ptmon collector - PtraceGetRegsArm64(return): %v", err)
 					}
 
 					retVal = system.CallReturnValue(regs)
@@ -230,14 +230,14 @@ func (m *monitor) Start() error {
 				//err = syscall.PtraceSyscall(pid, 0)
 				err = unix.PtraceSyscall(targetPid, 0)
 				if err != nil {
-					log.Warnf("ptmon: collector - PtraceSyscall error: %v", err)
+					log.Warnf("sensor: ptmon collector - PtraceSyscall error: %v", err)
 					break
 				}
 
 				//pid, err = syscall.Wait4(-1, &wstat, syscall.WALL, nil)
 				pid, err = unix.Wait4(targetPid, &wstat, 0, nil)
 				if err != nil {
-					log.Warnf("ptmon: collector - error waiting 4 %d: %v", targetPid, err)
+					log.Warnf("sensor: ptmon collector - error waiting 4 %d: %v", targetPid, err)
 					break
 				}
 
@@ -251,13 +251,13 @@ func (m *monitor) Start() error {
 						retVal:  retVal,
 					}:
 					case <-m.ctx.Done():
-						log.Info("ptmon: collector - stopping...")
+						log.Info("sensor: ptmon collector - stopping...")
 						return
 					}
 				}
 			}
 
-			log.Infoln("ptmon: collector - exiting... status=", wstat)
+			log.Infoln("sensor: ptmon collector - exiting... status=", wstat)
 			collectorDoneChan <- 0
 		}()
 
@@ -265,21 +265,21 @@ func (m *monitor) Start() error {
 		for {
 			select {
 			case rc := <-collectorDoneChan:
-				log.Info("ptmon: processor - collector finished =>", rc)
+				log.Info("sensor: ptmon processor - collector finished =>", rc)
 				break done
 			case <-m.ctx.Done():
-				log.Info("ptmon: processor - stopping...")
+				log.Info("sensor: ptmon processor - stopping...")
 				//NOTE: need a better way to stop the target app...
 				if err := app.Process.Signal(unix.SIGTERM); err != nil {
-					log.Warnln("ptmon: processor - error stopping target app =>", err)
+					log.Warnln("sensor: ptmon processor - error stopping target app =>", err)
 					if err := app.Process.Kill(); err != nil {
-						log.Warnln("ptmon: processor - error killing target app =>", err)
+						log.Warnln("sensor: ptmon processor - error killing target app =>", err)
 					}
 				}
 				break done
 			case e := <-eventChan:
 				ptReport.SyscallCount++
-				log.Debugf("ptmon: syscall ==> %d", e.callNum)
+				log.Debugf("sensor: ptmon syscall ==> %d", e.callNum)
 
 				if _, ok := syscallStats[e.callNum]; ok {
 					syscallStats[e.callNum]++
@@ -289,8 +289,8 @@ func (m *monitor) Start() error {
 			}
 		}
 
-		log.Debugf("ptmon: processor - executed syscall count = %d", ptReport.SyscallCount)
-		log.Debugf("ptmon: processor - number of syscalls: %v", len(syscallStats))
+		log.Debugf("sensor: ptmon processor - executed syscall count = %d", ptReport.SyscallCount)
+		log.Debugf("sensor: ptmon processor - number of syscalls: %v", len(syscallStats))
 		for scNum, scCount := range syscallStats {
 			log.Debugf("%v", syscallResolver(scNum))
 			log.Debugf("[%v] %v = %v", scNum, syscallResolver(scNum), scCount)
@@ -327,7 +327,7 @@ func startSignalForwarding(
 	app *exec.Cmd,
 	signalCh <-chan os.Signal,
 ) context.CancelFunc {
-	log.Debug("ptmon: signal forwarder - starting...")
+	log.Debug("sensor: ptmon signal forwarder - starting...")
 
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -338,19 +338,19 @@ func startSignalForwarding(
 				return
 
 			case s := <-signalCh:
-				log.WithField("signal", s).Debug("ptmon: signal forwarder - received signal")
+				log.WithField("signal", s).Debug("sensor: ptmon signal forwarder - received signal")
 
 				if s == syscall.SIGCHLD {
 					continue
 				}
 
-				log.WithField("signal", s).Debug("ptmon: signal forwarder - forwarding signal")
+				log.WithField("signal", s).Debug("sensor: ptmon signal forwarder - forwarding signal")
 
 				if err := app.Process.Signal(s); err != nil {
 					log.
 						WithError(err).
 						WithField("signal", s).
-						Debug("ptmon: signal forwarder - failed to signal target app")
+						Debug("sensor: ptmon signal forwarder - failed to signal target app")
 				}
 			}
 		}

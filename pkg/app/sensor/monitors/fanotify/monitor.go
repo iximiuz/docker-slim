@@ -94,7 +94,7 @@ func NewMonitor(
 }
 
 func (m *monitor) Start() error {
-	log.Info("fanmon: Start")
+	log.Info("sensor: fanmon - starting...")
 
 	nd, err := fanapi.Initialize(fanapi.FAN_CLASS_NOTIF, os.O_RDONLY)
 	if err != nil {
@@ -113,13 +113,13 @@ func (m *monitor) Start() error {
 	// Tracking the completetion of the monitor....
 
 	go func() {
-		log.Debug("fanmon: collector - starting...")
+		log.Debug("sensor: fanmon collector - starting...")
 
 		var eventID uint32
 		eventCh := make(chan Event, eventBufSize)
 
 		go func() {
-			log.Debug("fanmon: processor - starting...")
+			log.Debug("sensor: fanmon processor - starting...")
 
 			fanReport := &report.FanMonitorReport{
 				MonitorPid:       os.Getpid(),
@@ -132,7 +132,7 @@ func (m *monitor) Start() error {
 			for {
 				select {
 				case <-m.ctx.Done():
-					log.Info("fanmon: processor - stopping...")
+					log.Info("sensor: fanmon processor - stopping...")
 					break process
 
 				case e := <-eventCh:
@@ -140,7 +140,7 @@ func (m *monitor) Start() error {
 				}
 			}
 
-			log.Debug("fanmon: processor - done, draining - starting...")
+			log.Debug("sensor: fanmon processor - done, draining - starting...")
 
 		drain:
 			for {
@@ -149,12 +149,12 @@ func (m *monitor) Start() error {
 					m.processEvent(e, fanReport)
 
 				default:
-					log.Debug("fanmon: draining - done")
+					log.Debug("sensor: fanmon draining - done")
 					break drain
 				}
 			}
 
-			log.Debugf("fanmon: processor - sending report (processed %v events)...", fanReport.EventCount)
+			log.Debugf("sensor: fanmon processor - sending report (processed %v events)...", fanReport.EventCount)
 			m.status.report = fanReport
 			close(m.doneCh)
 		}()
@@ -172,10 +172,10 @@ func (m *monitor) Start() error {
 				m.errorCh <- errors.SE("sensor.fanotify.Run/nd.GetEvent", "call.error", err)
 				continue
 			}
-			log.Debugf("fanmon: collector - data.Mask => %x", data.Mask)
+			log.Debugf("sensor: fanmon collector - data.Mask => %x", data.Mask)
 
 			if (data.Mask & fanapi.FAN_Q_OVERFLOW) == fanapi.FAN_Q_OVERFLOW {
-				log.Debug("fanmon: collector - overflow event")
+				log.Debug("sensor: fanmon collector - overflow event")
 				continue
 			}
 
@@ -184,18 +184,18 @@ func (m *monitor) Start() error {
 			isWrite := false
 
 			if (data.Mask & fanapi.FAN_OPEN) == fanapi.FAN_OPEN {
-				log.Debug("fanmon: collector - file open")
+				log.Debug("sensor: fanmon collector - file open")
 				doNotify = true
 			}
 
 			if (data.Mask & fanapi.FAN_ACCESS) == fanapi.FAN_ACCESS {
-				log.Debug("fanmon: collector - file read")
+				log.Debug("sensor: fanmon collector - file read")
 				isRead = true
 				doNotify = true
 			}
 
 			if (data.Mask & fanapi.FAN_MODIFY) == fanapi.FAN_MODIFY {
-				log.Debug("fanmon: collector - file write")
+				log.Debug("sensor: fanmon collector - file write")
 				isWrite = true
 				doNotify = true
 			}
@@ -208,7 +208,7 @@ func (m *monitor) Start() error {
 				continue
 			}
 
-			log.Debugf("fanmon: collector - file path => %v", path)
+			log.Debugf("sensor: fanmon collector - file path => %v", path)
 
 			data.File.Close()
 			if doNotify {
@@ -218,7 +218,7 @@ func (m *monitor) Start() error {
 				select {
 				case eventCh <- e:
 				case <-m.ctx.Done():
-					log.Info("fanmon: collector - stopping....")
+					log.Info("sensor: fanmon collector - stopping....")
 					return
 				}
 			}
@@ -242,7 +242,7 @@ func (m *monitor) Status() (*report.FanMonitorReport, error) {
 
 func (m *monitor) processEvent(e Event, fanReport *report.FanMonitorReport) {
 	fanReport.EventCount++
-	log.Debugf("fanmon: processor - [%v] handling event %v", fanReport.EventCount, e)
+	log.Debugf("sensor: fanmon processor - [%v] handling event %v", fanReport.EventCount, e)
 
 	if _, ok := m.origPaths[e.File]; !ok && !m.includeNew {
 		return

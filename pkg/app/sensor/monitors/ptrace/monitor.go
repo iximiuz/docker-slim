@@ -70,7 +70,7 @@ func (m *monitor) Start() error {
 		WithField("name", m.runOpt.Cmd).
 		WithField("args", m.runOpt.Args).
 		Debug("sensor: starting target app...")
-	log.Info("ptmon: Start")
+	log.Info("sensor: ptmon - starting...")
 
 	// Despite the name, ptrace.Run() is not blocking.
 	app, err := ptrace.Run(
@@ -89,16 +89,16 @@ func (m *monitor) Start() error {
 	appState := <-app.StateCh
 	log.
 		WithField("state", appState).
-		Debugf("ptmon: pta state watcher - new target app state")
+		Debugf("sensor: ptmon state watcher - new target app state")
 
 	if appState == ptrace.AppFailed {
 		// Don't need to wait for the 'done' state.
-		log.Error("ptmon: pta state watcher - target app failed")
+		log.Error("sensor: ptmon state watcher - target app failed")
 		return fmt.Errorf("ptmon: target app startup failed: %q", appState)
 	}
 	if appState != ptrace.AppStarted {
 		// Cannot really happen.
-		log.Error("ptmon: pta state watcher - unexpected target app state")
+		log.Error("sensor: ptmon state watcher - unexpected target app state")
 		return fmt.Errorf("ptmon: unexpected target app state %q", appState)
 	}
 
